@@ -142,13 +142,9 @@ A veces es necesario convertir entre tipos de datos. Por ejemplo en el siguiente
 ```` 
 uint8 a = 5;
 uint b = 6;
-````
 // dará un error porque a * b devuelve un `uint` y no un `uint8`:
-````
 uint8 c = a * b;
-````
 // debemos de forzar la variable b para que sea convertida a `uint8`
-````
 uint8 c = a * uint8(b);
 ````
 
