@@ -793,7 +793,7 @@ Esto es un ejemplo trivial para enseñarte a cómo usar la sintaxis, pero en el 
 Nota: los arrays de tipo memory deben ser creados con una longitud como argumento (en este ejemplo, 3). Actualmente no pueden ser redimensionados como los arrays storage pueden serlo usando array.push(), de todas maneras esto podría cambiar en futuras versiones de Solidity.
 
 
-### Bucles For
+## Bucles For
 La sintaxis de los bucles for en Solidity es similar a JavaScript.
 
 Vamos a ver un ejemplo donde queremos hacer un array de números pares:
