@@ -729,7 +729,7 @@ Una mánera fácil de prevenir problemas que cualquiera llame una función es ha
 ## Modificadores de funciones con argumentos
 Antes hemos visto el ejemplo simple de onlyOwner. Pero un modificador de función puede también recibir argumentos. Por ejemplo:
 
-´´´´
+````
 // Un mapeo para guardar la edad de un usuario:
 mapping (uint => uint) public age;
 
@@ -744,7 +744,7 @@ modifier olderThan(uint _age, uint _userId) {
 function driveCar(uint _userId) public olderThan(16, _userId) {
   // La lógica de la función
 }
-´´´´
+````
 
 Puedes ver aquí como el modificador olderThan recibe los argumentos de la misma manera que las funciones. Y cómo la función driveCar le pasa sus argumentos al modificador.
 
@@ -775,7 +775,7 @@ Puedes usar la palabra clave memory con arrays para crear un nuevo arrays dentro
 
 Así es como se declara un array en memoria:
 
-´´´´
+````
 function getArray() external pure returns(uint[]) {
   // Instanciamos un nuevo array en memoria con una longitud de 3
   uint[] memory values = new uint[](3);
@@ -786,7 +786,7 @@ function getArray() external pure returns(uint[]) {
   // Devolvemos el arrays
   return values;
 }
-´´´´
+````
 
 Esto es un ejemplo trivial para enseñarte a cómo usar la sintaxis, pero en el próximo capítulo veremos como combinarlo con bucles for para usarlo en casos de uso reales.
 
@@ -798,7 +798,7 @@ La sintaxis de los bucles for en Solidity es similar a JavaScript.
 
 Vamos a ver un ejemplo donde queremos hacer un array de números pares:
 
-´´´´
+````
 function getEvens() pure external returns(uint[]) {
   uint[] memory evens = new uint[](5);
   // Guardamos el índice del nuevo array:
@@ -815,6 +815,6 @@ function getEvens() pure external returns(uint[]) {
   }
   return evens;
 }
-´´´´
+````
 
 La función devolverá un array con este contenido [2, 4, 6, 8, 10].
