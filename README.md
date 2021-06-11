@@ -818,3 +818,419 @@ function getEvens() pure external returns(uint[]) {
 ````
 
 La función devolverá un array con este contenido [2, 4, 6, 8, 10].
+
+
+## Payable
+Hasta ahora, hemos cubierto unos cuantos modificadores de función. Puede resultar difícil tratar de recordar todo, así que hagamos un breve repaso:
+
+1. Tenemos modificadores de visibilidad que controlan desde dónde y cuándo la función puede ser llamada: private significa que sólo puede ser llamada desde otras funciones dentro del contrato; internal es como private pero también puede ser llamada por contratos que hereden desde este; external sólo puede ser llamada desde afuera del contrato; y finalmente public puede ser llamada desde cualquier lugar, tanto internamente como externamente.
+
+2. También tenemos modificadores, los cuales nos dicen cómo interactúa la función con la BlockChain: view nos indica que al ejecutar la función, ningún dato será guardado/cambiado. pure nos indica que la función no sólo no guarda ningún dato en la blockchain, si no que tampoco lee ningún dato de la blockchain. Ambos no cuestan nada de combustible para llamar si son llamados externamente desde afuera del contrato (pero si cuestan combustible si son llamado internamente por otra función).
+
+3. Luego tenemos los modifiers personalizados, onlyOwner, por ejemplo. Para estos podemos definir la lógica personalizada para determinar cómo afectan a una función.
+
+Todos estos modificadores pueden ser apilados juntos en una definición de función de la siguiente manera:
+
+````
+function test() external view onlyOwner anotherModifier { /* ... */ }
+````
+
+### El Modificador payable
+Las funciones payable son parte de lo que hace de Solidity y Ethereum algo tan genial — son un tipo de función especial que pueden recibir Ether.
+
+Pienselo por un momento. Cuando llama una función API en un servidor web normal, no puede enviar dólares (USD$) junto con su llamada de función — ni enviar Bitcoin.
+
+Pero en Ethereum, ya que tanto el dinero (Ether), los datos (payload de transacción) y el mismo código de contrato viven en Ethereum, es posible para usted llamar a una función y pagar dinero por el contrato al mismo tiempo.
+
+Esto abarca una lógica realmente interesante, como requerir cierto pago por el contrato para, de esta manera, ejecutar una función.
+
+Veamos un ejemplo
+
+````
+contract OnlineStore {
+  function buySomething() external payable {
+    // Check to make sure 0.001 ether was sent to the function call:
+    require(msg.value == 0.001 ether);
+    // If so, some logic to transfer the digital item to the caller of the function:
+    transferThing(msg.sender);
+  }
+}
+````
+Aquí, msg.value es una manera de ver cuanto Ether fue enviado al contrato, y ether es una unidad incorporada.
+
+Lo que sucede aquí es que alguien llamaría a la función desde web3.js (desde la interfaz JavaScript del DApp) de esta manera:
+
+````
+// Assuming `OnlineStore` points to your contract on Ethereum:
+OnlineStore.buySomething({from: web3.eth.defaultAccount, value: web3.utils.toWei(0.001)})
+````
+
+Nótese el campo value, donde la llamada de función javascript especifíca cuánto de ether enviar (0.001). Si piensas en la transacción como un sobre, y los parámetros que usted envía a la llamada de función son los contenidos de la carta que coloca adentro, entonces añadir un value es como poner dinero en efectivo dentro del sobre — la carta y el dinero son entregados juntos al receptor.
+
+Nota: Si una función no es marcada como payable y usted intenta enviar Ether a esta, como se hizo anteriormente, la función rechazará su transacción.
+
+
+## Retiros
+En el capitulo anterior, aprendimos cómo enviar Ether a un contrato. Entonces ¿Qué ocurre cuando lo envía?
+
+Luego de enviar Ether a un contrato, este se almacena en la cuenta de Ethereum del contrato y estará atrapado ahí — a menos que añada una función para retirar el Ether del contrato
+
+Puede escribir una función para retirar Ether del contrato de la siguiente forma:
+
+````
+contract GetPaid is Ownable {
+  function withdraw() external onlyOwner {
+    owner.transfer(this.balance);
+  }
+}
+````
+Nótese que estamos utilizando owner y onlyOwner del contrato Ownable, asumiendo que este fue importado.
+
+Puede transferir Ether a una dirección utilizando la función transfer y this.balance devolverá el balance total almacenado en el contrato. Así que si 100 usuarios han pagado 1 Ether a nuestro contrato, this.balance sería igual a 100 Ether.
+
+Puede utilizar transfer para enviar fondos a cualquier dirección de Ethereum. Por ejemplo, podría tener una función que transfiera Ether de vuelta al msg.sender si rebasan el precio al pagar un item.
+
+````
+uint itemFee = 0.001 ether;
+msg.sender.transfer(msg.value - itemFee);
+O en un contrato con un comprador y un vendedor, usted podría guardar la dirección del vendedor en la memoria, luego, cuando alguien adquiera su item, transferirle la tasa pagada por el comprador: seller.transfer(msg.value).
+````
+
+Estos son algunos ejemplos de lo que hace de la programación de Ethereum algo realmente genial — puede tener mercados descentralizados como este que no son controlados por nadie.
+
+
+## Números Aleatorios
+¿Cómo generamos números aleatorios en Solidity?
+
+La respuesta correcta es que no puede. Bueno, al menos no puede hacerlo de una manera segura.
+
+Veamos por qué.
+
+### La generación aleatoria de números a través de keccak256
+La mejor fuente de aleatoriedad que tenemos en solidity es la función hash keccak256.
+
+Podríamos hacer algo como lo siguiente para generar un número aleatorio:
+
+````
+// Generate a random number between 1 and 100:
+uint randNonce = 0;
+uint random = uint(keccak256(now, msg.sender, randNonce)) % 100;
+randNonce++;
+uint random2 = uint(keccak256(now, msg.sender, randNonce)) % 100;
+````
+
+Lo que esto haría es tomar la marca de tiempo de now, el msg.sender, y un nonce (un número que sólo se utiliza una vez, para que no ejecutemos dos veces la misma función hash con los mismos parámetros de entrada) en incremento.
+
+Luego entonces utilizaría keccak para convertir estas entradas a un hash aleatorio, convertir ese hash a un uint y luego utilizar % 100 para tomar los últimos 2 dígitos solamente, dándonos un número totalmente aleatorio entre 0 y 99.
+
+#### Este método es vulnerable a ataques de nodos deshonestos
+En Ethereum, cuando llama a una función en un contrato, lo transmite a un nodo o nodos en la red como una transacción. Los nodos en la red luego recolectan un montón de transacciones, intentan ser el primero en resolver el problema de matemática intensamente informático como una "Prueba de Trabajo", para luego publicar ese grupo de transacciones junto con sus Pruebas de Trabajo (PoW) como un bloque para el resto de la red.
+
+Una vez que un nodo ha resuelto la PoW, los otros nodos dejan de intentar resolver la PoW, verifican que las transacciones en la lista de transacciones del otro nodo son válidas, luego aceptan el bloque y pasan a tratar de resolver el próximo bloque.
+
+##### Esto hace que nuestra función de números aleatorios sea explotable.
+
+Digamos que teníamos un contrato coin flip — cara y duplica su dinero, sello y pierde todo. Digamos que utilizó la función aleatoria anterior para determinar cara o sello. (random >= 50 es cara, random < 50 es sello).
+
+Si yo estuviera ejecutando un nodo, podría publicar una transacción a mi propio nodo solamente y no compartirla. Luego podría ejecutar la función coin flip para ver si gané — y si perdí, escojo no incluir esa transacción en el próximo bloque que estoy resolviendo. Podría seguir haciendo esto indefinidamente hasta que finalmente gané el lanzamiento de la moneda y resolví el siguiente bloque, beneficiandome de ello.
+
+### Entonces ¿Cómo generamos números aleatorio de manera segura en Ethereum?
+Ya que todos los contenidos de la blockchain son visibles para todos los participantes, este es un problema dificil, y su solución está más allá del rango de este tutorial. Puede leer [este hilo de StackOverflow](https://ethereum.stackexchange.com/questions/191/how-can-i-securely-generate-a-random-number-in-my-smart-contract "Named link title") para que se haga un idea. Una idea sería utilizar un oráculo para ingresar una función de número aleatorio desde fuera de la blockchain de Ethereum.
+
+Por supuesto, debido a que cientos de miles de nodos de Ethereum en la red están compitiendo por resolver el próximo bloque, mis probabilidades de resolver el siguiente bloque son extremadamente escasas. Me tomaría mucho tiempo o recursos informáticos para explotar esto y que sea beneficioso — pero si la recompensa fuera lo suficientemente alta (como si pudiera apostar $100,000,000 en la función coin flip), para mi valdría la pena atacar.
+
+Así que mientras esta generación de número aleatorio NO sea segura en Ethereum, en la práctica a menos que nuestra función aleatoria tenga mucho dinero en riesgo, es probable que los usuarios de su DAPP no tengan suficientes recursos para atacarla.
+
+## Tokens en Ethereum
+Hablemos de tokens.
+
+Si has estado en el ecosistema de Ethereum durante un tiempo, es probable que hayas oído hablar de los tokens — en concreto, de los tokens ERC20.
+
+Un token es básicamente un contrato inteligente que sigue algunas reglas comunes, es decir, implementa un conjunto estándar de funciones que comparten el resto de tokens (contratos), como por ejemplo transfer(address _to, uint256 _value) y balanceOf(address _owner).
+
+Internamente, el contrato inteligente tiene por lo general un mapeo, mapping(address => uint256) balances, que realiza un seguimiento de cuánto saldo tiene cada dirección.
+
+Así que, básicamente, un token es sólo un contrato que realiza un seguimiento de quién posee la cantidad de ese token y algunas funciones para que los usuarios puedan transferir sus tokens a otras direcciones.
+
+### ¿Por qué importa?
+Dado que todos los tokens ERC20 comparten el mismo conjunto de funciones con los mismos nombres, todos pueden interactuar de la misma manera.
+
+Esto significa que si creas una aplicación que es capaz de interactuar con un token de tipo ERC20, también será capaz de interactuar con cualquier token de tipo ERC20. De esta forma, más tokens se pueden añadir fácilmente a tu aplicación en el futuro, sin necesidad de tener códigos personalizados por cada uno de los tipos de token ERC20. Simplemente puede conectar la nueva dirección de contrato del token y boom, tu aplicación tiene otro token que puedes usar.
+
+Un ejemplo de esto sería un exchange (casa de cambio). Cuando un exchange añade un nuevo token ERC20 solo necesita agregar otro contrato inteligente con el que comunicarse. Los usuarios pueden indicarle a ese contrato que envíe los tokens a la dirección de su monedero en el exchange, y el exchange puede indicarle al contrato que devuelva los tokens a los usuarios cuando soliciten un retiro.
+
+El exchange solo necesita implementar esta lógica de transferencia una vez, luego, cuando quiera añadir un nuevo token ERC20, es simplemente una cuestión de añadir la nueva dirección del contrato a su base de datos.
+
+### Otros estándares de token
+Hay otro estándar de token que encaja mucho mejor con los cripto-coleccionables como CryptoZombies, y se llaman tokens ERC721.
+
+Los tokens ERC721 no son intercambiables entre sí, ya que se supone que cada uno de ellos es totalmente único e indivisible. Solo se pueden intercambiar en unidades completas, y cada uno tiene una ID única.
+
+Nota: Tenga en cuenta que el uso de un estándar como ERC721 tiene el beneficio de que no tenemos que implementar la lógica que está detrás del sistema que permite las operaciones de compra/venta en nuestro contrato. Si cumplimos con la especificación, alguien más podría construir otra plataforma de intercambio para los activos ERC721, y nuestros tokens ERC721 se podrían usar en esa plataforma. Por lo tanto, existen beneficios claros en el uso de un token estándar en lugar de desarrollar su propia lógica comercial.
+
+
+## Estandar ERC721 Standard, Herencia Multiple
+Vamos a echar un vistazo al estándar ERC721:
+
+````
+contract ERC721 {
+  event Transfer(address indexed _from, address indexed _to, uint256 _tokenId);
+  event Approval(address indexed _owner, address indexed _approved, uint256 _tokenId);
+
+  function balanceOf(address _owner) public view returns (uint256 _balance);
+  function ownerOf(uint256 _tokenId) public view returns (address _owner);
+  function transfer(address _to, uint256 _tokenId) public;
+  function approve(address _to, uint256 _tokenId) public;
+  function takeOwnership(uint256 _tokenId) public;
+}
+````
+
+Nota: El estándar ERC721 actualmente es un borrador, y aún no hay una implementación oficialmente acordada.
+
+### Implementando un contrato de token
+Al implementar un contrato de token, lo primero que hay que hacer es copiar el fichero de la interfaz a nuestro propio directorio e importarlo con import "./erc721.sol";. Luego, declararemos a nuestro contrato que herede de él y reescribiremos cada método con una definición de la función.
+
+En Solidity, nuestro contrato puede tener herencia múltiple de la siguiente forma:
+
+````
+contract SatoshiNakamoto is NickSzabo, HalFinney {
+  // Omg, the secrets of the universe revealed!
+}
+````
+
+Como puede ver, para usar herencia múltiple sólo es necesario separar por comas , cada uno de los contratos múltiples. En este caso, nuestro contrato heredará de NickSzabo y HalFinney.
+
+
+## balanceOf & ownerOf
+### balanceOf
+````
+function balanceOf(address _owner) public view returns (uint256 _balance);
+````
+
+Esta función simplemente recibe una dirección address, y devuelve cuántos tokens tiene esa dirección address.
+
+### ownerOf
+````
+function ownerOf(uint256 _tokenId) public view returns (address _owner);
+````
+
+Esta función recibe un ID de un token (en nuestro caso, un ID de un Zombie) y devuelve la dirección de la persona que lo posee.
+
+
+## ERC721: Lógica de transferencia
+Fíjese que la especificación de ERC721 tiene 2 formas distintas de poder transferir tokens:
+
+````
+function transfer(address _to, uint256 _tokenId) public;
+function approve(address _to, uint256 _tokenId) public;
+function takeOwnership(uint256 _tokenId) public;
+````
+
+La primera forma consiste en que el propietario llame a transfer con la dirección address a la cual quiere enviar, y el _tokenId del token que quiere transferir.
+
+La segunda forma consiste en que el propietario llame primero a approve, y envía la misma información que el caso anterior. Después, el contrato almacena quién está autorizado para tomar un token, generalmente en un mapping (uint256 => address). Entonces, cuando alguien llame a takeOwnership, el contrato comprueba si ese msg.sender está autorizado por el propietario para tomar ese token y si es así, le transfiere el token.
+
+Si te das cuenta, tanto transfer como takeOwnership contienen la misma lógica para la transferencia, sólo que en orden inverso. (En un caso, el emisor del token llama a la función, en el otro el receptor del token lo llama).
+
+Entonces, tiene sentido que abstraigamos esta lógica en su propia función privada, _transfer, que luego es llamada por ambas funciones. De esa forma no repetiremos el mismo código dos veces.
+
+## ERC721: Approve
+Recuerda, con approve / takeOwnership, la transferencia se produce en 2 pasos:
+
+Tú, el propietario, llamas a approve y envías la dirección address del nuevo propietario, y el _tokenId que quieres enviar.
+
+El nuevo propietario llama a takeOwnership con el _tokenId, el contrato comprobará que este nuevo usuario está autorizado para ello y si es correcto, le transferirá el token.
+
+Como esto ocurre durante 2 llamadas distintas, necesitamos una estructura de datos para almacenar quién ha sido aprobado para cada cosa, en cada uno de los pasos donde se produce cada llamada a una función
+
+
+## Previniendo debordamientos
+### Mejoras de seguridad en el contrato: Desbordamientos por exceso (Overflows) y por defecto (Underflows)
+Vamos a ver una característica de seguridad importante que debe tener en cuenta al escribir contratos inteligentes: Prevención de desbordamientos por exceso (overflow) y por defecto (underflow).
+
+¿Qué es un desbordamiento?
+
+Digamos que tenemos un campo uint8, que sólo puede tener hasta 8 bits. Esto significa, que el número en binario más grande posible sería 11111111 (o en decimal, 2^8 - 1 = 255).
+
+Eche un vistazo al código siguiente. ¿Qué valor tendrá number al final?
+
+````
+uint8 number = 255;
+number++;
+````
+
+En este caso, hemos provocado un desbordamiento por exceso (overflow) — así que number convertirá su valor igual a 0 aunque lo hayamos aumentado. (Si añades +1 al valor binario 11111111, se reiniciará al valor inicial 00000000, igual que un reloj pasa de las 23:59 a las 00:00).
+
+Un desbordamiento por defecto es similar, cuando intentemos restar un 1 a un campo uint8 que tiene valor 0, ahora pasará a valer 255 (porque el tipo uint no tiene signo y por lo tanto, no puede ser negativo).
+
+### Usando SafeMath
+Para prevenir esto, OpenZeppelin ha creado una librería llamada SafeMath que previene estos problemas por defecto.
+
+Pero antes de entrar en eso... ¿Qué es una librería?
+
+Una librería es un tipo de contrato especial en Solidity. Una de las cosas para las cuales es útil, es para asociar funciones a tipos de datos nativos.
+
+Por ejemplo, con la librería SafeMath, usaremos la sintaxis using SafeMath for uint256. La librería SafeMath tiene 4 funciones— add, sub, mul y div. Y ahora podemos acceder a estas funciones desde uint256 de la siguiente manera:
+
+````
+using SafeMath for uint256;
+
+uint256 a = 5;
+uint256 b = a.add(3); // 5 + 3 = 8
+uint256 c = a.mul(2); // 5 * 2 = 10
+````
+
+Veremos qué hacen estas funciones en el próximo capítulo, pero por ahora agreguemos la librería SafeMath a nuestro contrato.
+
+
+## SafeMath Part 2
+Echemos un vistazo al código detrás de SafeMath:
+
+````
+library SafeMath {
+
+  function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+    if (a == 0) {
+      return 0;
+    }
+    uint256 c = a * b;
+    assert(c / a == b);
+    return c;
+  }
+
+  function div(uint256 a, uint256 b) internal pure returns (uint256) {
+    // assert(b > 0); // Solidity automatically throws when dividing by 0
+    uint256 c = a / b;
+    // assert(a == b * c + a % b); // There is no case in which this doesn't hold
+    return c;
+  }
+
+  function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+    assert(b <= a);
+    return a - b;
+  }
+
+  function add(uint256 a, uint256 b) internal pure returns (uint256) {
+    uint256 c = a + b;
+    assert(c >= a);
+    return c;
+  }
+}
+````
+
+Primero, tenemos la palabra clave reservada library— las librerías son similares a los contracts pero con algunas diferencias. Para nuestros propósitos, las librerías nos permiten usar la palabra clave reservada using, que automáticamente asocia a todos los métodos de la librería con unos tipos de datos:
+
+````
+using SafeMath for uint;
+// now we can use these methods on any uint
+uint test = 2;
+test = test.mul(3); // test now equals 6
+test = test.add(5); // test now equals 11
+````
+
+Fíjese que las funciones mul y add requieren dos parámetros de entrada, pero cuando declaramos using SafeMath for uint, el uint al que llamamos en la función (test) se pasa automáticamente como parámetro.
+
+Veamos el código que tiene add para ver qué hace SafeMath:
+
+````
+function add(uint256 a, uint256 b) internal pure returns (uint256) {
+  uint256 c = a + b;
+  assert(c >= a);
+  return c;
+}
+````
+
+Básicamente add suma 2 valores uints como hace el símbolo +, pero también contiene una declaración assert para asegurarse de que la suma sea mayor que a. Esto nos protege de desbordamientos por exceso (overflows).
+
+assert es similar a require, donde lanzará un error si es falso. La diferencia entre assert y require es que require devolverá al usuario el resto del gas cuando la función falle, mientras que assert no lo hará. Por lo tanto, la mayor parte del tiempo deseará utilizar require en su código; assert se usará normalmente sólo cuando algo ha ido terriblemente mal con el código (como un desbordamiento en uint).
+
+Entonces, en pocas palabras, las funciones de SafeMath's de add, sub, mul, ydiv son funciones que realizan las 4 operaciones básicas de matemáticas, pero lanzan un error si ocurre un desbordamiento por exceso o por defecto.
+
+### Usando SafeMath en nuestro código.
+Para evitar el desbordamiento, podemos buscar en nuestro código los lugares donde se utilicen +, -, *, o /, y sustituirlos por add, sub, mul, div.
+
+Ejemplo. En lugar de escribir:
+
+````
+myUint++;
+````
+
+Deberíamos poner:
+
+````
+myUint = myUint.add(1);
+````
+
+
+## SafeMath Part 3
+````
+// Si usamos `.add` con un `uint8`, lo convertirá en `uint256`.
+// Por lo tanto no se desbordará, ya que 256 funciona en `uint256`.
+````
+
+Esto significa que vamos a tener que implementar 2 librerías más para evitar los casos con uint16 y uint32. Podemos llamarlos SafeMath16 y SafeMath32.
+
+El código será exactamente igual al de SafeMath, excepto que todas las instancias de uint256 serán reemplazadas por uint32 o uint16 .
+
+## Comentarios
+Comentar en Solidity es como JavaScript:
+
+````
+// Este es un comentario de una sola línea. Es como una nota para uno mismo (o para otros)
+````
+
+Simplemente añade // en cualquier lugar y estarás comentando. Es tan fácil que deberías hacerlo todo el tiempo.
+
+Pero te entiendo— a veces una sola línea no es suficiente. ¡Eres escritor, después de todo!
+
+Por lo tanto, también tenemos comentarios de varias líneas:
+
+````
+contract CryptoZombies {
+  /* Este es un comentario con múltiples líneas. 
+      Me gustaría agradecerles a todos vosotros, los que se han tomado su    
+      tiempo para probar este curso de programación.
+      Sé que es gratis para todos ustedes, y se mantendrá libre
+    para siempre, pero aún ponemos nuestro corazón y nuestra alma en hacer
+    esto tan bueno como puede ser.
+
+    Sepa que este es todavía el comienzo del desarrollo de Blockchain.
+    Hemos llegado muy lejos, pero hay muchas maneras de hacer esto en
+    comunidad mejor. Si cometimos un error en alguna parte, puedes
+    ayudarnos y abrir una pull request aquí:
+    https://github.com/loomnetwork/cryptozombie-lessons
+
+    O si tiene algunas ideas, comentarios o simplemente quiere decirnos hola
+    - Únase a nuestra comunidad de Telegram en https://t.me/loomnetwork
+  */
+}
+````
+
+En particular, es una buena práctica comentar su código para explicar el comportamiento esperado de cada función en su contrato. De esta forma, otro desarrollador (¡O tú, después de un paréntesis de 6 meses en un proyecto!) puede leer rápidamente y comprender a un nivel alto lo que hace su código sin tener que leer el código en sí.
+
+El estándar en la comunidad Solidity es usar un formato llamado natspec, que tiene esta apariencia:
+
+````
+/// @title Un contrato para operaciones matemáticas básicas
+/// @author H4XF13LD MORRIS 💯💯😎💯💯
+/// @notice Por ahora, este contrato solo añade una función de multiplicar
+contract Math {
+  /// @notice Multiplica 2 números juntos
+  /// @param x el primer uint.
+  /// @param y el segundo uint.
+  /// @return z el resultado de (x * y)
+  /// @dev Esta función actualmente no verifica desbordamientos
+  function multiply(uint x, uint y) returns (uint z) {
+    // Este es solo un comentario normal, y no será recogido por natspec
+    z = x * y;
+  }
+}
+````
+
+@title y @author son simples.
+
+@notice explica a un usuario lo que hace el contrato o la función. @dev es para explicar detalles adicionales a los desarrolladores.
+
+@param y @return son para describir para qué sirve cada parámetro y el valor de retorno de una función.
+
+Tenga en cuenta que no siempre tiene que usar todas estas etiquetas para cada función — todas las etiquetas son opcionales. Pero al menos, deje una nota @dev explicando lo que hace cada función.
